@@ -1,0 +1,24 @@
+{
+    "name": "yasser-elgammal/pure-text",
+    "description": "Filter Bad Words",
+    "license": "MIT",
+    "autoload": {
+        "psr-4": {
+            "YasserElgammal\\PureText\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "YasserElgammal",
+            "email": "yassermelgammal@gmail.com"
+        }
+    ],
+    "minimum-stability": "dev",
+    "extra": {
+        "laravel": {
+            "providers": [
+                "YasserElgammal\\PureText\\PureTextServiceProvider"
+            ]
+        }
+    }
+}
