@@ -17,7 +17,7 @@
 1. Install the package via Composer:
 
     ```bash
-    composer require yasserelgammal/pure-text
+    composer require yasser-elgammal/pure-text
     ```
 
 2. Publish the configuration file:
