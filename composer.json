@@ -1,7 +1,7 @@
 {
     "name": "yasser-elgammal/pure-text",
     "description": "Filter Bad Words",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "license": "MIT",
     "autoload": {
         "psr-4": {
