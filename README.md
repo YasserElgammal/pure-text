@@ -11,6 +11,7 @@
 - **Language Support**: Works with multiple languages, including Arabic and other non-Latin character sets.
 - **Trait Integration**: Apply the `Filterable` trait to models, specifying which attributes should be filtered.
 - **Service Provider Configuration**: Provides easy configuration via a service provider and includes a singleton service for optimal performance.
+- **Custom Validation Rule**: `pure_text`
 
 ## Installation
 
@@ -67,6 +68,17 @@ $post->save();
 
 echo $post->title; // Outputs: This is a ***
 ```
+
+## Other Usage :: With Custom Validation Rule: `pure_text`
+
+This package provides a custom validation rule `pure_text`  
+that checks if the given text contains prohibited words using `PureTextFilterService`  
+and prevents the creation or update if prohibited words are found.
+
+```php
+$request->validate([
+    'content' => 'required|pure_text'
+]);
 
 ## Contributing
 
