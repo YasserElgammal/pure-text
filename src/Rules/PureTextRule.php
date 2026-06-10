@@ -4,22 +4,27 @@ namespace YasserElgammal\PureText\Rules;
 
 use Closure;
 use Illuminate\Contracts\Validation\ValidationRule;
-use YasserElgammal\PureText\Services\PureTextFilterService;
+use YasserElgammal\PureText\Contracts\TextFilterInterface;
 
 class PureTextRule implements ValidationRule
 {
-    protected $filterService;
+    protected TextFilterInterface $filterService;
 
     public function __construct()
     {
-        $this->filterService = new PureTextFilterService();
+        $this->filterService = app(TextFilterInterface::class);
     }
 
+    /**
+     * Run the validation rule.
+     */
     public function validate(string $attribute, mixed $value, Closure $fail): void
     {
-        $filtered = $this->filterService->filter($value);
+        if (!is_string($value)) {
+            return;
+        }
 
-        if ($filtered !== $value) {
+        if ($this->filterService->containsBadWords($value)) {
             $fail(__('The :attribute contains prohibited words.'));
         }
     }
