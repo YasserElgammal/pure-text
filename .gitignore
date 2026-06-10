@@ -1,1 +1,7 @@
 /vendor
+/.phpunit.cache
+composer.lock
+.DS_Store
+*.swp
+*.swo
+.editorconfig
