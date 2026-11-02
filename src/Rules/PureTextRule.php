@@ -10,9 +10,18 @@ class PureTextRule implements ValidationRule
 {
     protected TextFilterInterface $filterService;
 
-    public function __construct()
+    /**
+     * @var array<int, string>
+     */
+    protected array $whitelist;
+
+    /**
+     * @param array<int, string> $whitelist Additional allowed words for this validation rule.
+     */
+    public function __construct(array $whitelist = [])
     {
         $this->filterService = app(TextFilterInterface::class);
+        $this->whitelist = $whitelist;
     }
 
     /**
@@ -24,7 +33,11 @@ class PureTextRule implements ValidationRule
             return;
         }
 
-        if ($this->filterService->containsBadWords($value)) {
+        $service = !empty($this->whitelist)
+            ? $this->filterService->withWhitelist($this->whitelist)
+            : $this->filterService;
+
+        if ($service->containsBadWords($value)) {
             $fail(__('The :attribute contains prohibited words.'));
         }
     }

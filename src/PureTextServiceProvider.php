@@ -20,7 +20,7 @@ class PureTextServiceProvider extends ServiceProvider
 
         // Register the validation rule: 'pure_text'
         Validator::extend('pure_text', function ($attribute, $value, $parameters, $validator) {
-            $rule = new PureTextRule();
+            $rule = new PureTextRule($parameters);
 
             $failed = false;
             $rule->validate($attribute, $value, function () use (&$failed) {

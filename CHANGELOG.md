@@ -2,8 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [2.1.0] - 2026-11-03
+
+### Added
+- **Laravel 13 Support**:
+  - Added support for Laravel 13 (`illuminate/support: ^13.0`, `illuminate/validation: ^13.0`).
+  - Added support for `orchestra/testbench: ^11.0` and `phpunit/phpunit: ^12.0`.
+  - Updated GitHub Actions CI test matrix to test against Laravel 13.
+- **Whitelist / Allowed Words**:
+  - Global whitelist configuration in `config/badwords.php` to prevent the Scunthorpe problem (false positives on innocent words like `cocktail`, `classic`, `document`).
+  - Runtime fluent whitelist support via `PureText::withWhitelist(array $words)` and `PureText::whitelist(array $words)`.
+  - Case-preserving restoration: whitelisted words retain their original casing after filtering.
+  - Whitelist parameters support in `pure_text` validation rule (e.g. `'pure_text:cocktail,wine'`) and constructor `new PureTextRule(['cocktail'])`.
+- **Arabic & Unicode Normalization**:
+  - Full Arabic diacritics (*tashkeel*) normalization: strips fatha, damma, kasra, tanween, shadda, sukun, and dagger alef during matching.
+  - Tatweel / kashida (`ـ`) evasion detection in middle and at word boundaries (`ســــيء`, `ـسيءـ`).
+  - Letter variant canonicalization: Alef forms (`أ`, `إ`, `آ`, `ٱ` $\rightarrow$ `ا`), Taa Marbuta / Haa (`ة` $\leftrightarrow$ `ه`), and Alef Maqsura / Yaa (`ى` $\leftrightarrow$ `ي`).
+  - Configurable toggle via `'normalize_arabic' => true`.
+- **Leetspeak & Homoglyph Evasion Detection**:
+  - Catches evasion using digit substitutions (`b4d`, `sh1t`, `p0rn`, `84d`, `1337`).
+  - Catches evasion using symbol substitutions (`@ss`, `sh!t`, `a$$`).
+  - Configurable toggle via `'detect_leetspeak' => true`.
+- Comprehensive unit tests covering Arabic normalization, leetspeak detection, whitelist filtering, and validation rule parameters.
 
 ## [2.0.0] - 2026-06-10
 
@@ -44,5 +64,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `PureTextFilterable` trait for automatic model attribute filtering.
 - Basic bad word filtering with regex.
 
+[2.1.0]: https://github.com/YasserElgammal/pure-text/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/YasserElgammal/pure-text/compare/v1.0.3...v2.0.0
 [1.0.3]: https://github.com/YasserElgammal/pure-text/releases/tag/v1.0.3

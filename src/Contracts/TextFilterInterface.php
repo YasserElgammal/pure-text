@@ -20,4 +20,18 @@ interface TextFilterInterface
      * @return array<int, string>
      */
     public function getBadWords(string $text): array;
+
+    /**
+     * Return a filter instance with additional whitelisted words.
+     *
+     * @param array<int, string> $words
+     */
+    public function withWhitelist(array $words): self;
+
+    /**
+     * Alias for withWhitelist.
+     *
+     * @param array<int, string> $words
+     */
+    public function whitelist(array $words): self;
 }
