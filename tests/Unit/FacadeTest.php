@@ -33,4 +33,10 @@ class FacadeTest extends TestCase
         $result = PureText::getBadWords('This is bad');
         $this->assertContains('bad', $result);
     }
+
+    public function test_facade_with_whitelist_method(): void
+    {
+        $result = PureText::withWhitelist(['badlands'])->filter('Visiting badlands and bad places');
+        $this->assertEquals('Visiting badlands and *** places', $result);
+    }
 }

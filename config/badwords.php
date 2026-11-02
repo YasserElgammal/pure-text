@@ -22,6 +22,47 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Whitelist / Allowed Words
+    |--------------------------------------------------------------------------
+    |
+    | Words or phrases that should never be flagged or replaced, even if they
+    | match bad words or evasion patterns (prevents the Scunthorpe problem).
+    |
+    | Example: ['cocktail', 'classic', 'document', 'pass']
+    |
+    */
+
+    'whitelist' => [
+        // 'cocktail',
+        // 'document',
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Arabic & Unicode Normalization
+    |--------------------------------------------------------------------------
+    |
+    | When enabled, normalizes Arabic diacritics (tashkeel), tatweel (kashida),
+    | and letter variants (e.g., أ/إ/آ -> ا, ة -> ه, ى -> ي) to detect evasion.
+    |
+    */
+
+    'normalize_arabic' => true,
+
+    /*
+    |--------------------------------------------------------------------------
+    | Leetspeak & Homoglyph Detection
+    |--------------------------------------------------------------------------
+    |
+    | When enabled, detects common leetspeak substitutions such as
+    | b4d, @ss, sh!t, p0rn, and 1337.
+    |
+    */
+
+    'detect_leetspeak' => true,
+
+    /*
+    |--------------------------------------------------------------------------
     | Replacement Text
     |--------------------------------------------------------------------------
     |
@@ -58,8 +99,8 @@ return [
     | Replacement Character
     |--------------------------------------------------------------------------
     |
-    | Used only with the 'character' strategy. Each character of the bad word
-    | will be replaced with this character.
+    | The character used when 'strategy' is set to 'character'.
+    | Each character in the bad word will be replaced with this character.
     |
     */
 

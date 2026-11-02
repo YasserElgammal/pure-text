@@ -12,7 +12,7 @@ class PureTextRuleTest extends TestCase
     {
         parent::setUp();
 
-        Config::set('badwords.words', ['bad', 'ugly']);
+        Config::set('badwords.words', ['bad', 'ugly', 'cock']);
         Config::set('badwords.replacement', '***');
         Config::set('badwords.strategy', 'fixed');
     }
@@ -68,6 +68,28 @@ class PureTextRuleTest extends TestCase
         $validator = validator(
             ['content' => 'This is clean text'],
             ['content' => 'required|pure_text']
+        );
+
+        $this->assertFalse($validator->fails());
+    }
+
+    public function test_rule_accepts_custom_whitelist_in_constructor(): void
+    {
+        $rule = new PureTextRule(whitelist: ['badlands']);
+        $failed = false;
+
+        $rule->validate('content', 'Exploring the badlands', function () use (&$failed) {
+            $failed = true;
+        });
+
+        $this->assertFalse($failed);
+    }
+
+    public function test_rule_accepts_whitelist_parameters_in_validator(): void
+    {
+        $validator = validator(
+            ['content' => 'Enjoying a cocktail at night'],
+            ['content' => 'required|pure_text:cocktail']
         );
 
         $this->assertFalse($validator->fails());
