@@ -1,3 +1,4 @@
+
 # PureText
 
 [![Tests](https://github.com/YasserElgammal/pure-text/actions/workflows/tests.yml/badge.svg)](https://github.com/YasserElgammal/pure-text/actions/workflows/tests.yml)
@@ -88,27 +89,32 @@ $clean = PureText::filter('Some bad text');
 
 // Check if text contains bad words
 if (PureText::containsBadWords($text)) {
-    // handle it
+    // Handle inappropriate content
 }
 
 // Get all bad words found
 $words = PureText::getBadWords($text); // ['bad', 'ugly']
 
 // Whitelist specific words on-the-fly
-$clean = PureText::withWhitelist(['cocktail'])->filter('Order a cocktail and bad wine');
-// Output: "Order a cocktail and *** wine"
+$clean = PureText::withWhitelist(['cocktail'])
+    ->filter('Order a cocktail, not a badword');
+
+// Output: "Order a cocktail, not a ***"
 ```
 
 ### 3. Whitelist / Allowed Words (Preventing False Positives)
 
-Avoid the classic Scunthorpe problem (e.g. flagging `"cocktail"` because of `"cock"`):
+Avoid the classic Scunthorpe problem (e.g. flagging `"cocktail"` because of `"cock"`).
+
+PureText supports both global and runtime whitelisting:
 
 ```php
 // In config/badwords.php:
 'whitelist' => ['cocktail', 'document', 'classic'],
 
 // Or dynamically in code:
-PureText::withWhitelist(['badlands'])->containsBadWords('Exploring the badlands'); // false
+PureText::withWhitelist(['badlands'])
+    ->containsBadWords('Exploring the badlands'); // false
 ```
 
 ### 4. Arabic & Unicode Normalization
@@ -116,10 +122,16 @@ PureText::withWhitelist(['badlands'])->containsBadWords('Exploring the badlands'
 PureText automatically handles Arabic diacritics (*tashkeel*), stretching (*tatweel*), and letter variants:
 
 ```php
-// With 'سيء' in your bad words list:
-PureText::filter('هذا سَيِّءٌ جداً');   // "هذا *** جداً" (tashkeel stripped)
-PureText::filter('هذا ســــيء جداً');   // "هذا *** جداً" (tatweel stripped)
-PureText::filter('هذا أحمق');           // "هذا ***" (matches 'احمق' without hamza)
+// With 'سيء' and 'احمق' in your bad words list:
+
+PureText::filter('هذا سَيِّءٌ جداً');
+// Output: "هذا *** جداً" (tashkeel stripped)
+
+PureText::filter('هذا ســــيء جداً');
+// Output: "هذا *** جداً" (tatweel stripped)
+
+PureText::filter('هذا أحمق');
+// Output: "هذا ***" (matches 'احمق' without hamza)
 ```
 
 ### 5. Leetspeak & Homoglyph Evasion
@@ -127,10 +139,16 @@ PureText::filter('هذا أحمق');           // "هذا ***" (matches 'احم�
 Catches evasion attempts that use numbers or symbols:
 
 ```php
-// With 'bad' and 'ass' in your bad words list:
-PureText::filter('This is b4d');   // "This is ***"
-PureText::filter('You are an @ss'); // "You are an ***"
-PureText::filter('Holy sh!t');     // "Holy ***"
+// With 'bad', 'ass', and 'shit' in your bad words list:
+
+PureText::filter('This is b4d');
+// Output: "This is ***"
+
+PureText::filter('You are an @ss');
+// Output: "You are an ***"
+
+PureText::filter('Holy sh!t');
+// Output: "Holy ***"
 ```
 
 ### 6. Blade Directive
@@ -147,9 +165,9 @@ Use in form requests or validators. You can also pass field-level whitelisted wo
 $request->validate([
     'title'   => 'required|pure_text',
     'content' => 'required|pure_text',
-    
+
     // Allow specific words for this field:
-    'recipe'  => 'required|pure_text:cocktail,wine',
+    'recipe'  => 'required|pure_text:cocktail,classic',
 ]);
 ```
 
@@ -175,7 +193,7 @@ $clean = pure_text('Some bad text');
 
 // Check for bad words
 if (has_bad_words($text)) {
-    // handle it
+    // Handle inappropriate content
 }
 ```
 
