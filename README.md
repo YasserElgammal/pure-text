@@ -217,6 +217,16 @@ return [
     // Detect leetspeak (b4d, @ss, sh!t, p0rn)
     'detect_leetspeak' => true,
 
+    // Regex safety limits
+    'max_separators' => 8,
+    'max_repeated_characters' => 8,
+    'pattern_chunk_size' => 250,
+    'max_word_length' => 100,
+    'max_words' => 10000,
+
+    // Block text if PCRE cannot complete instead of returning it unfiltered
+    'fail_closed' => true,
+
     // Replacement text (used with 'fixed' strategy)
     'replacement' => '***',
 
@@ -227,6 +237,12 @@ return [
     'character' => '*',
 ];
 ```
+
+Word and whitelist entries are trimmed, deduplicated case-insensitively, and
+empty or non-string values are ignored. Entries that exceed the configured
+limits are treated as configuration errors. With `fail_closed` enabled, regex
+or configuration failures return the configured replacement from `filter()`
+and cause `containsBadWords()` to return `true`.
 
 ### Replacement Strategies
 

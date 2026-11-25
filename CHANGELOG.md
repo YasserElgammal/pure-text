@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.2.0] - 2026-11-25
+
+### Security
+- Bound separator and repeated-character matching and compile large word lists in configurable chunks.
+- Fail closed by default when PCRE or word-list configuration errors occur.
+
+### Changed
+- Sanitize, trim, and deduplicate bad-word and whitelist configuration entries before compiling patterns.
+- Removed the mutable `setWhitelist()` API; use the immutable `withWhitelist()` method instead.
+- Prevent replacement text from being filtered again when multiple pattern chunks are used.
+
+### Tests
+- Added coverage for word-list sanitization, bounded matching, pattern chunks, and regex failure policies.
+
 ## [2.1.0] - 2026-11-03
 
 ### Added

@@ -11,12 +11,14 @@ class PureTextFilterService implements TextFilterInterface
     /**
      * Cached compiled regex pattern for bad words.
      */
-    protected ?string $compiledPattern = null;
+    /** @var array<int, string>|null */
+    protected ?array $compiledPatterns = null;
 
     /**
      * Cached compiled regex pattern for whitelist.
      */
-    protected ?string $compiledWhitelistPattern = null;
+    /** @var array<int, string>|null */
+    protected ?array $compiledWhitelistPatterns = null;
 
     /**
      * Custom runtime whitelist words.
@@ -75,23 +77,30 @@ class PureTextFilterService implements TextFilterInterface
      * Get the regex pattern component for a single character,
      * taking into account Arabic normalization and leetspeak substitution.
      */
-    protected function getCharPattern(string $char, bool $normalizeArabic, bool $detectLeetspeak): string
+    protected function getCharPattern(
+        string $char,
+        bool $normalizeArabic,
+        bool $detectLeetspeak,
+        int $maxSeparators,
+    ): string
     {
+        $marks = '[\p{M}]{0,' . $maxSeparators . '}';
+
         if ($normalizeArabic) {
             if ($char === 'ا') {
-                return '(?:[اأإآٱ][\p{M}]*)';
+                return '(?:[اأإآٱ]' . $marks . ')';
             }
             if ($char === 'ه') {
-                return '(?:[هة][\p{M}]*)';
+                return '(?:[هة]' . $marks . ')';
             }
             if ($char === 'ي') {
-                return '(?:[يىئ][\p{M}]*)';
+                return '(?:[يىئ]' . $marks . ')';
             }
             if ($char === 'و') {
-                return '(?:[وؤ][\p{M}]*)';
+                return '(?:[وؤ]' . $marks . ')';
             }
             if (preg_match('/\p{Arabic}/u', $char)) {
-                return '(?:' . preg_quote($char, '/') . '[\p{M}]*)';
+                return '(?:' . preg_quote($char, '/') . $marks . ')';
             }
         }
 
@@ -111,58 +120,86 @@ class PureTextFilterService implements TextFilterInterface
      * Supports Unicode (Arabic, etc.) using Unicode-aware boundaries,
      * optional tatweel/kashida evasion, diacritics, and leetspeak.
      */
-    protected function buildPattern(): ?string
+    protected function buildPatterns(): array
     {
-        if ($this->compiledPattern !== null) {
-            return $this->compiledPattern;
+        if ($this->compiledPatterns !== null) {
+            return $this->compiledPatterns;
         }
 
-        $badWords = Config::get('badwords.words', []);
+        $badWords = $this->sanitizeWords(Config::get('badwords.words', []), 'words');
 
         if (empty($badWords)) {
-            return $this->compiledPattern = null;
+            return $this->compiledPatterns = [];
         }
 
         $normalizeArabic = (bool) Config::get('badwords.normalize_arabic', true);
         $detectLeetspeak = (bool) Config::get('badwords.detect_leetspeak', true);
+        $maxSeparators = $this->integerConfig('max_separators', 8, 0, 32);
+        $maxRepeatedCharacters = $this->integerConfig('max_repeated_characters', 8, 1, 32);
+        $chunkSize = $this->integerConfig('pattern_chunk_size', 250, 1, 1000);
+        $separator = '[\W_\x{0640}\p{M}]{0,' . $maxSeparators . '}';
 
-        $alternatives = array_map(function (string $word) use ($normalizeArabic, $detectLeetspeak): string {
+        usort($badWords, static fn (string $a, string $b): int => mb_strlen($b) <=> mb_strlen($a));
+
+        $alternatives = array_map(function (string $word) use (
+            $normalizeArabic,
+            $detectLeetspeak,
+            $maxSeparators,
+            $maxRepeatedCharacters,
+            $separator,
+        ): string {
             $normalizedWord = $normalizeArabic ? $this->normalizeArabicWord($word) : $word;
 
             $chars = preg_split('//u', $normalizedWord, -1, PREG_SPLIT_NO_EMPTY) ?: [];
 
-            $charPatterns = array_map(function (string $char) use ($normalizeArabic, $detectLeetspeak): string {
-                return $this->getCharPattern($char, $normalizeArabic, $detectLeetspeak);
+            if ($chars === []) {
+                return '';
+            }
+
+            $charPatterns = array_map(function (string $char) use (
+                $normalizeArabic,
+                $detectLeetspeak,
+                $maxSeparators,
+            ): string {
+                return $this->getCharPattern($char, $normalizeArabic, $detectLeetspeak, $maxSeparators);
             }, $chars);
 
-            $inner = implode('[\W_\x{0640}\p{M}]*', array_map(function (string $charPattern): string {
-                return '(?:' . $charPattern . ')+';
-            }, $charPatterns));
+            $inner = implode($separator, array_map(
+                static fn (string $charPattern): string => '(?:' . $charPattern . '){1,' . $maxRepeatedCharacters . '}',
+                $charPatterns
+            ));
 
             // Unicode-aware word boundaries:
             // (?<![^\P{L}\x{0640}]) — not preceded by a letter (except tatweel \x{0640})
             // (?![^\P{L}\x{0640}]) — not followed by a letter (except tatweel \x{0640})
-            return '(?<![^\P{L}\x{0640}])\x{0640}*' . $inner . '\x{0640}*(?![^\P{L}\x{0640}])';
+            return '(?<![^\P{L}\x{0640}])\x{0640}{0,' . $maxSeparators . '}'
+                . $inner
+                . '\x{0640}{0,' . $maxSeparators . '}(?![^\P{L}\x{0640}])';
         }, $badWords);
 
-        $this->compiledPattern = '/' . implode('|', $alternatives) . '/iu';
+        $alternatives = array_values(array_filter($alternatives));
 
-        return $this->compiledPattern;
+        $patterns = array_map(
+            static fn (array $chunk): string => '/' . implode('|', $chunk) . '/iu',
+            array_chunk($alternatives, $chunkSize)
+        );
+
+        return $this->compiledPatterns = $patterns;
     }
 
     /**
      * Build the regex pattern for matching whitelisted words.
      */
-    protected function buildWhitelistPattern(): ?string
+    protected function buildWhitelistPatterns(): array
     {
-        if ($this->compiledWhitelistPattern !== null) {
-            return $this->compiledWhitelistPattern;
+        if ($this->compiledWhitelistPatterns !== null) {
+            return $this->compiledWhitelistPatterns;
         }
 
         $whitelist = $this->getWhitelist();
 
         if (empty($whitelist)) {
-            return $this->compiledWhitelistPattern = null;
+            return $this->compiledWhitelistPatterns = [];
         }
 
         // Sort by length descending so longer phrases match before shorter sub-words
@@ -174,9 +211,12 @@ class PureTextFilterService implements TextFilterInterface
             return '(?<![^\P{L}\x{0640}])' . preg_quote($word, '/') . '(?![^\P{L}\x{0640}])';
         }, $whitelist);
 
-        $this->compiledWhitelistPattern = '/' . implode('|', $alternatives) . '/iu';
+        $chunkSize = $this->integerConfig('pattern_chunk_size', 250, 1, 1000);
 
-        return $this->compiledWhitelistPattern;
+        return $this->compiledWhitelistPatterns = array_map(
+            static fn (array $chunk): string => '/' . implode('|', $chunk) . '/iu',
+            array_chunk($alternatives, $chunkSize)
+        );
     }
 
     /**
@@ -184,22 +224,138 @@ class PureTextFilterService implements TextFilterInterface
      *
      * @param array<string, string> $placeholders
      */
-    protected function protectWhitelisted(string $text, array &$placeholders): string
+    protected function protectWhitelisted(string $text, array &$placeholders): ?string
     {
-        $pattern = $this->buildWhitelistPattern();
+        $patterns = $this->buildWhitelistPatterns();
 
-        if ($pattern === null) {
+        if (empty($patterns)) {
             return $text;
         }
 
         $counter = 0;
 
-        return preg_replace_callback($pattern, function (array $matches) use (&$placeholders, &$counter): string {
-            $placeholder = "\x1E\x1FPTWL" . ($counter++) . "\x1F\x1E";
-            $placeholders[$placeholder] = $matches[0];
+        foreach ($patterns as $pattern) {
+            $result = preg_replace_callback($pattern, function (array $matches) use (&$placeholders, &$counter): string {
+                $placeholder = $this->makePlaceholder($counter++, 0xF0000, "\u{E000}", "\u{E001}");
+                $placeholders[$placeholder] = $matches[0];
 
-            return $placeholder;
-        }, $text) ?? $text;
+                return $placeholder;
+            }, $text);
+
+            if ($result === null) {
+                $this->logRegexError($pattern);
+
+                return null;
+            }
+
+            $text = $result;
+        }
+
+        return $text;
+    }
+
+    /**
+     * Build a Unicode private-use placeholder that filtering patterns cannot
+     * consume or bridge across (padding exceeds the maximum separator limit).
+     */
+    protected function makePlaceholder(
+        int $counter,
+        int $baseCodePoint,
+        string $leftPadding,
+        string $rightPadding,
+    ): string
+    {
+        return str_repeat($leftPadding, 33)
+            . mb_chr($baseCodePoint + ($counter % 0xFFFD), 'UTF-8')
+            . str_repeat($rightPadding, 33);
+    }
+
+    /**
+     * Normalize configured word lists before compiling them into regular expressions.
+     *
+     * @return array<int, string>
+     */
+    protected function sanitizeWords(mixed $words, string $listName): array
+    {
+        if (!is_array($words)) {
+            throw new \InvalidArgumentException("PureText: The {$listName} configuration must be an array.");
+        }
+
+        $maxWordLength = $this->integerConfig('max_word_length', 100, 1, 1000);
+        $maxWords = $this->integerConfig('max_words', 10000, 1, 100000);
+        $sanitized = [];
+        $seen = [];
+
+        foreach ($words as $word) {
+            if (!is_string($word)) {
+                continue;
+            }
+
+            $word = preg_replace('/^\s+|\s+$/u', '', $word) ?? trim($word);
+
+            if ($word === '') {
+                continue;
+            }
+
+            if (mb_strlen($word) > $maxWordLength) {
+                throw new \InvalidArgumentException(
+                    "PureText: An entry in {$listName} exceeds max_word_length ({$maxWordLength})."
+                );
+            }
+
+            $key = mb_strtolower($word);
+
+            if (isset($seen[$key])) {
+                continue;
+            }
+
+            if (count($sanitized) >= $maxWords) {
+                throw new \InvalidArgumentException(
+                    "PureText: The {$listName} configuration exceeds max_words ({$maxWords})."
+                );
+            }
+
+            $seen[$key] = true;
+            $sanitized[] = $word;
+        }
+
+        return $sanitized;
+    }
+
+    protected function integerConfig(string $key, int $default, int $minimum, int $maximum): int
+    {
+        $value = filter_var(Config::get("badwords.{$key}", $default), FILTER_VALIDATE_INT);
+
+        if ($value === false) {
+            return $default;
+        }
+
+        return max($minimum, min($maximum, $value));
+    }
+
+    protected function failClosed(): bool
+    {
+        return (bool) Config::get('badwords.fail_closed', true);
+    }
+
+    protected function regexFailureReplacement(string $originalText): string
+    {
+        return $this->failClosed()
+            ? (string) Config::get('badwords.replacement', '***')
+            : $originalText;
+    }
+
+    protected function logRegexError(string $pattern): void
+    {
+        Log::warning('PureText: Regex error while filtering text.', [
+            'error' => preg_last_error_msg(),
+            'pattern_hash' => hash('sha256', $pattern),
+        ]);
+    }
+
+    protected function logConfigurationError(\InvalidArgumentException $exception): void
+    {
+        Log::warning($exception->getMessage());
     }
 
     /**
@@ -243,36 +399,57 @@ class PureTextFilterService implements TextFilterInterface
      */
     public function filter(string $text): string
     {
+        $originalText = $text;
         $placeholders = [];
-        $text = $this->protectWhitelisted($text, $placeholders);
 
-        $pattern = $this->buildPattern();
+        try {
+            $text = $this->protectWhitelisted($text, $placeholders);
+            $patterns = $this->buildPatterns();
+        } catch (\InvalidArgumentException $exception) {
+            $this->logConfigurationError($exception);
 
-        if ($pattern === null) {
+            return $this->regexFailureReplacement($originalText);
+        }
+
+        if ($text === null) {
+            return $this->regexFailureReplacement($originalText);
+        }
+
+        if (empty($patterns)) {
             return $this->restoreWhitelisted($text, $placeholders);
         }
 
-        $strategy = Config::get('badwords.strategy', 'fixed');
+        $replacementPlaceholders = [];
+        $replacementCounter = 0;
 
-        if ($strategy === 'fixed') {
-            $replacement = Config::get('badwords.replacement', '***');
-            $result = preg_replace($pattern, $replacement, $text);
-        } else {
-            $result = preg_replace_callback($pattern, function (array $matches): string {
-                return $this->getReplacement($matches[0]);
+        foreach ($patterns as $pattern) {
+            $result = preg_replace_callback($pattern, function (array $matches) use (
+                &$replacementPlaceholders,
+                &$replacementCounter,
+            ): string {
+                $placeholder = $this->makePlaceholder(
+                    $replacementCounter++,
+                    0x100000,
+                    "\u{E002}",
+                    "\u{E003}",
+                );
+                $replacementPlaceholders[$placeholder] = $this->getReplacement($matches[0]);
+
+                return $placeholder;
             }, $text);
+
+            if ($result === null) {
+                $this->logRegexError($pattern);
+
+                return $this->regexFailureReplacement($originalText);
+            }
+
+            $text = $result;
         }
 
-        if ($result === null) {
-            Log::warning('PureText: Regex error while filtering text.', [
-                'error' => preg_last_error_msg(),
-                'pattern' => $pattern,
-            ]);
+        $text = strtr($text, $replacementPlaceholders);
 
-            return $this->restoreWhitelisted($text, $placeholders);
-        }
-
-        return $this->restoreWhitelisted($result, $placeholders);
+        return $this->restoreWhitelisted($text, $placeholders);
     }
 
     /**
@@ -281,15 +458,39 @@ class PureTextFilterService implements TextFilterInterface
     public function containsBadWords(string $text): bool
     {
         $placeholders = [];
-        $text = $this->protectWhitelisted($text, $placeholders);
 
-        $pattern = $this->buildPattern();
+        try {
+            $text = $this->protectWhitelisted($text, $placeholders);
+            $patterns = $this->buildPatterns();
+        } catch (\InvalidArgumentException $exception) {
+            $this->logConfigurationError($exception);
 
-        if ($pattern === null) {
+            return $this->failClosed();
+        }
+
+        if ($text === null) {
+            return $this->failClosed();
+        }
+
+        if (empty($patterns)) {
             return false;
         }
 
-        return (bool) preg_match($pattern, $text);
+        foreach ($patterns as $pattern) {
+            $result = preg_match($pattern, $text);
+
+            if ($result === false) {
+                $this->logRegexError($pattern);
+
+                return $this->failClosed();
+            }
+
+            if ($result === 1) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -300,30 +501,61 @@ class PureTextFilterService implements TextFilterInterface
     public function getBadWords(string $text): array
     {
         $placeholders = [];
-        $text = $this->protectWhitelisted($text, $placeholders);
 
-        $pattern = $this->buildPattern();
+        try {
+            $text = $this->protectWhitelisted($text, $placeholders);
+            $patterns = $this->buildPatterns();
+        } catch (\InvalidArgumentException $exception) {
+            $this->logConfigurationError($exception);
 
-        if ($pattern === null) {
             return [];
         }
 
-        preg_match_all($pattern, $text, $matches);
+        if ($text === null) {
+            return [];
+        }
 
-        return $matches[0] ?? [];
-    }
+        if (empty($patterns)) {
+            return [];
+        }
 
-    /**
-     * Set a custom whitelist for this service instance.
-     *
-     * @param array<int, string> $words
-     */
-    public function setWhitelist(array $words): self
-    {
-        $this->customWhitelist = $words;
-        $this->compiledWhitelistPattern = null;
+        $found = [];
 
-        return $this;
+        foreach ($patterns as $pattern) {
+            $result = preg_match_all($pattern, $text, $matches, PREG_OFFSET_CAPTURE);
+
+            if ($result === false) {
+                $this->logRegexError($pattern);
+
+                return [];
+            }
+
+            foreach ($matches[0] ?? [] as [$match, $offset]) {
+                $found[] = [
+                    'match' => $match,
+                    'offset' => $offset,
+                    'length' => strlen($match),
+                ];
+            }
+        }
+
+        usort($found, static function (array $a, array $b): int {
+            return ($a['offset'] <=> $b['offset']) ?: ($b['length'] <=> $a['length']);
+        });
+
+        $matches = [];
+        $lastMatchEnd = -1;
+
+        foreach ($found as $item) {
+            if ($item['offset'] < $lastMatchEnd) {
+                continue;
+            }
+
+            $matches[] = $item['match'];
+            $lastMatchEnd = $item['offset'] + $item['length'];
+        }
+
+        return $matches;
     }
 
     /**
@@ -335,7 +567,11 @@ class PureTextFilterService implements TextFilterInterface
     {
         $configWhitelist = Config::get('badwords.whitelist', []);
 
-        return array_values(array_unique(array_merge($configWhitelist, $this->customWhitelist)));
+        if (!is_array($configWhitelist)) {
+            throw new \InvalidArgumentException('PureText: The whitelist configuration must be an array.');
+        }
+
+        return $this->sanitizeWords(array_merge($configWhitelist, $this->customWhitelist), 'whitelist');
     }
 
     /**
@@ -346,8 +582,8 @@ class PureTextFilterService implements TextFilterInterface
     public function withWhitelist(array $words): self
     {
         $clone = clone $this;
-        $clone->customWhitelist = array_values(array_unique(array_merge($this->getWhitelist(), $words)));
-        $clone->compiledWhitelistPattern = null;
+        $clone->customWhitelist = array_values(array_merge($this->customWhitelist, $words));
+        $clone->compiledWhitelistPatterns = null;
 
         return $clone;
     }
@@ -367,8 +603,8 @@ class PureTextFilterService implements TextFilterInterface
      */
     public function resetPattern(): void
     {
-        $this->compiledPattern = null;
-        $this->compiledWhitelistPattern = null;
+        $this->compiledPatterns = null;
+        $this->compiledWhitelistPatterns = null;
         $this->customWhitelist = [];
     }
 }

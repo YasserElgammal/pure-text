@@ -63,6 +63,35 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Pattern Safety Limits
+    |--------------------------------------------------------------------------
+    |
+    | These limits keep generated regular expressions predictable and prevent
+    | unbounded separator/repeated-character matching on untrusted input.
+    | Large word lists are compiled in smaller independent chunks.
+    |
+    */
+
+    'max_separators' => 8,
+    'max_repeated_characters' => 8,
+    'pattern_chunk_size' => 250,
+    'max_word_length' => 100,
+    'max_words' => 10000,
+
+    /*
+    |--------------------------------------------------------------------------
+    | Regex Failure Policy
+    |--------------------------------------------------------------------------
+    |
+    | When enabled, a PCRE failure blocks the text instead of returning it
+    | unfiltered. Disable only when preserving the legacy fail-open behavior.
+    |
+    */
+
+    'fail_closed' => true,
+
+    /*
+    |--------------------------------------------------------------------------
     | Replacement Text
     |--------------------------------------------------------------------------
     |
