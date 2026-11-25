@@ -1,7 +1,6 @@
 {
     "name": "yasser-elgammal/pure-text",
     "description": "A Laravel package for filtering and replacing inappropriate or unwanted words with support for Arabic and Unicode, multiple replacement strategies, Blade directives, middleware, and more.",
-    "version": "2.1.0",
     "type": "library",
     "license": "MIT",
     "keywords": [

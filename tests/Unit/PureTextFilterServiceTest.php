@@ -345,4 +345,128 @@ class PureTextFilterServiceTest extends TestCase
 
         $this->assertEmpty($this->service->getBadWords('anything'));
     }
+
+    public function test_sanitizes_empty_non_string_and_duplicate_words(): void
+    {
+        Config::set('badwords.words', ['', '   ', null, 123, ' bad ', 'BAD', 'ugly']);
+        Config::set('badwords.replacement', '***');
+        $this->service->resetPattern();
+
+        $this->assertSame('*** and ***', $this->service->filter('bad and ugly'));
+        $this->assertSame('clean text', $this->service->filter('clean text'));
+    }
+
+    public function test_a_list_of_empty_words_does_not_create_zero_width_matches(): void
+    {
+        Config::set('badwords.words', ['', ' ', "\t", "\n"]);
+        $this->service->resetPattern();
+
+        $this->assertSame('clean text', $this->service->filter('clean text'));
+        $this->assertFalse($this->service->containsBadWords('clean text'));
+    }
+
+    public function test_limits_separators_between_characters(): void
+    {
+        Config::set('badwords.words', ['bad']);
+        Config::set('badwords.max_separators', 2);
+        Config::set('badwords.replacement', '***');
+        $this->service->resetPattern();
+
+        $this->assertSame('***', $this->service->filter('b--a--d'));
+        $this->assertSame('b---a---d', $this->service->filter('b---a---d'));
+    }
+
+    public function test_compiles_large_lists_in_chunks_and_preserves_match_order(): void
+    {
+        Config::set('badwords.words', ['first', 'second', 'third']);
+        Config::set('badwords.pattern_chunk_size', 1);
+        $this->service->resetPattern();
+
+        $this->assertSame(
+            ['third', 'first', 'second'],
+            $this->service->getBadWords('third first second')
+        );
+    }
+
+    public function test_chunked_patterns_do_not_filter_replacement_text_again(): void
+    {
+        Config::set('badwords.words', ['terrible', 'bad']);
+        Config::set('badwords.pattern_chunk_size', 1);
+        Config::set('badwords.replacement', 'bad');
+        $this->service->resetPattern();
+
+        $this->assertSame('bad', $this->service->filter('terrible'));
+    }
+
+    public function test_chunked_patterns_return_the_longest_non_overlapping_match(): void
+    {
+        Config::set('badwords.words', ['bad word', 'bad']);
+        Config::set('badwords.pattern_chunk_size', 1);
+        $this->service->resetPattern();
+
+        $this->assertSame(['bad word'], $this->service->getBadWords('bad word'));
+    }
+
+    public function test_invalid_word_list_limits_fail_closed(): void
+    {
+        Config::set('badwords.words', ['overlong']);
+        Config::set('badwords.max_word_length', 3);
+        Config::set('badwords.fail_closed', true);
+        Config::set('badwords.replacement', '[blocked]');
+        $this->service->resetPattern();
+
+        $this->assertSame('[blocked]', $this->service->filter('clean text'));
+        $this->assertTrue($this->service->containsBadWords('clean text'));
+    }
+
+    public function test_regex_runtime_errors_fail_closed_by_default(): void
+    {
+        Config::set('badwords.whitelist', []);
+        Config::set('badwords.fail_closed', true);
+        Config::set('badwords.replacement', '[blocked]');
+
+        $service = new class extends PureTextFilterService {
+            protected function buildPatterns(): array
+            {
+                return ['/(a+)+$/'];
+            }
+        };
+
+        $previousLimit = ini_get('pcre.backtrack_limit');
+        ini_set('pcre.backtrack_limit', '10');
+
+        try {
+            $text = str_repeat('a', 100) . 'X';
+
+            $this->assertSame('[blocked]', $service->filter($text));
+            $this->assertTrue($service->containsBadWords($text));
+        } finally {
+            ini_set('pcre.backtrack_limit', (string) $previousLimit);
+        }
+    }
+
+    public function test_regex_runtime_errors_can_use_legacy_fail_open_policy(): void
+    {
+        Config::set('badwords.whitelist', []);
+        Config::set('badwords.fail_closed', false);
+
+        $service = new class extends PureTextFilterService {
+            protected function buildPatterns(): array
+            {
+                return ['/(a+)+$/'];
+            }
+        };
+
+        $previousLimit = ini_get('pcre.backtrack_limit');
+        ini_set('pcre.backtrack_limit', '10');
+
+        try {
+            $text = str_repeat('a', 100) . 'X';
+
+            $this->assertSame($text, $service->filter($text));
+            $this->assertFalse($service->containsBadWords($text));
+        } finally {
+            ini_set('pcre.backtrack_limit', (string) $previousLimit);
+        }
+    }
 }

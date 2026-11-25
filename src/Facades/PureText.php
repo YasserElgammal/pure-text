@@ -11,7 +11,6 @@ use YasserElgammal\PureText\Contracts\TextFilterInterface;
  * @method static array getBadWords(string $text)
  * @method static \YasserElgammal\PureText\Contracts\TextFilterInterface withWhitelist(array $words)
  * @method static \YasserElgammal\PureText\Contracts\TextFilterInterface whitelist(array $words)
- * @method static \YasserElgammal\PureText\Services\PureTextFilterService setWhitelist(array $words)
  * @method static array getWhitelist()
  *
  * @see \YasserElgammal\PureText\Services\PureTextFilterService
